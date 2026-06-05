@@ -1,0 +1,274 @@
+Kalau targetnya **AntrianQ yang serius dan siap berkembang**, saya tidak menyarankan memakai kode yang sekarang apa adanya. Saya sarankan kita refactor sedikit dulu.
+
+Berikut struktur yang saya rekomendasikan:
+
+```text
+lib/
+├── main.dart
+├── core/
+│   └── supabase/
+│       └── supabase_config.dart
+│
+├── features/
+│   └── auth/
+│       ├── pages/
+│       │   ├── login_page.dart
+│       │   └── register_page.dart
+│       │
+│       ├── providers/
+│       │   └── auth_provider.dart
+│       │
+│       ├── services/
+│       │   └── auth_service.dart
+│       │
+│       └── widgets/
+│           └── auth_layout.dart
+```
+
+---
+
+# 1. auth_service.dart
+
+```dart
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class AuthService {
+  final SupabaseClient _client = Supabase.instance.client;
+
+  Future<AuthResponse> signIn({
+    required String email,
+    required String password,
+  }) async {
+    return await _client.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+  }
+
+  Future<AuthResponse> signUp({
+    required String email,
+    required String password,
+  }) async {
+    return await _client.auth.signUp(
+      email: email,
+      password: password,
+    );
+  }
+
+  Future<void> logout() async {
+    await _client.auth.signOut();
+  }
+
+  User? get currentUser => _client.auth.currentUser;
+}
+```
+
+---
+
+# 2. auth_provider.dart
+
+```dart
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../services/auth_service.dart';
+
+enum AuthStatus {
+  initial,
+  loading,
+  authenticated,
+  error,
+}
+
+class AuthState {
+  final AuthStatus status;
+  final String? errorMessage;
+
+  const AuthState({
+    required this.status,
+    this.errorMessage,
+  });
+
+  factory AuthState.initial() =>
+      const AuthState(status: AuthStatus.initial);
+
+  factory AuthState.loading() =>
+      const AuthState(status: AuthStatus.loading);
+
+  factory AuthState.authenticated() =>
+      const AuthState(status: AuthStatus.authenticated);
+
+  factory AuthState.error(String msg) =>
+      AuthState(
+        status: AuthStatus.error,
+        errorMessage: msg,
+      );
+}
+
+final authServiceProvider = Provider<AuthService>((ref) {
+  return AuthService();
+});
+
+class AuthNotifier extends StateNotifier<AuthState> {
+  final AuthService _service;
+
+  AuthNotifier(this._service)
+      : super(AuthState.initial());
+
+  Future<void> login(
+    String email,
+    String password,
+  ) async {
+    try {
+      state = AuthState.loading();
+
+      await _service.signIn(
+        email: email,
+        password: password,
+      );
+
+      state = AuthState.authenticated();
+    } catch (e) {
+      state = AuthState.error(
+        e.toString(),
+      );
+    }
+  }
+
+  Future<void> register(
+    String email,
+    String password,
+  ) async {
+    try {
+      state = AuthState.loading();
+
+      await _service.signUp(
+        email: email,
+        password: password,
+      );
+
+      state = AuthState.authenticated();
+    } catch (e) {
+      state = AuthState.error(
+        e.toString(),
+      );
+    }
+  }
+}
+
+final authProvider =
+    StateNotifierProvider<AuthNotifier, AuthState>(
+  (ref) {
+    return AuthNotifier(
+      ref.read(authServiceProvider),
+    );
+  },
+);
+```
+
+---
+
+# 3. main.dart
+
+Kalau sudah punya URL dan ANON KEY:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'features/auth/pages/login_page.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: 'SUPABASE_URL',
+    anonKey: 'SUPABASE_ANON_KEY',
+  );
+
+  runApp(
+    const ProviderScope(
+      child: MyApp(),
+    ),
+  );
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'AntrianQ',
+      home: const LoginPage(),
+    );
+  }
+}
+```
+
+---
+
+# 4. RegisterPage
+
+Pada tombol Register ganti:
+
+```dart
+ref.read(authProvider.notifier).register(
+  _emailController.text.trim(),
+  _passwordController.text.trim(),
+);
+```
+
+Karena sekarang register sudah ke Supabase.
+
+---
+
+# 5. LoginPage
+
+Pada tombol Login:
+
+```dart
+ref.read(authProvider.notifier).login(
+  _emailController.text.trim(),
+  _passwordController.text.trim(),
+);
+```
+
+---
+
+# Ada Satu Hal Penting
+
+Di desain kamu ada:
+
+```text
+Full Name
+Email
+Password
+```
+
+Sedangkan Supabase Auth bawaan hanya menyimpan:
+
+```text
+id
+email
+```
+
+Jadi setelah Register berhasil, kita perlu membuat tabel:
+
+```sql
+create table profiles (
+  id uuid primary key references auth.users(id),
+  full_name text,
+  created_at timestamptz default now()
+);
+```
+
+Lalu otomatis insert nama pengguna ke tabel `profiles`.
+
+Menurut saya langkah terbaik sekarang:
+
+1. Buat project Supabase.
+2. Kirim struktur folder Flutter yang sudah kamu buat (screenshot panel kiri Android Studio).
+3. Kirim screenshot halaman **Settings → API** (sensor anon key jika mau).
+
+Setelah itu saya bisa bantu menuliskan kode lengkap yang langsung cocok dengan struktur project-mu, bukan contoh umum lagi.
