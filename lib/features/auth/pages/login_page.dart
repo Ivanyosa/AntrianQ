@@ -1,9 +1,10 @@
-import 'package:antrianq/features/auth/pages/home_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_provider.dart';
 import 'register_page.dart';
+import '../../admin/pages/admin_page.dart';
+import '../../user/pages/user_page.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -44,16 +45,30 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
+      final role = await ref.read(authProvider).getUserRole();
+
+      print("ROLE USER = [$role]");
 
       if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Login berhasil")));
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
-        );
+        if (role.trim().toLowerCase() == 'admin') {
+          print("MASUK ADMIN PAGE");
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const AdminPage()),
+          );
+        } else {
+          print("MASUK USER PAGE");
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const UserPage()),
+          );
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(
