@@ -13,7 +13,7 @@ class RegisterPage extends ConsumerStatefulWidget {
 class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
 
-  final _fullNameController = TextEditingController();
+  final _usernameController = TextEditingController();
 
   final _emailController = TextEditingController();
 
@@ -29,7 +29,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   @override
   void dispose() {
-    _fullNameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -47,7 +47,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       await ref
           .read(authProvider)
           .register(
-            fullName: _fullNameController.text.trim(),
+            username: _usernameController.text.trim(),
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
@@ -84,7 +84,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
           child: Column(
             children: [
               TextFormField(
-                controller: _fullNameController,
+                controller: _usernameController,
 
                 decoration: const InputDecoration(
                   labelText: "Full Name",

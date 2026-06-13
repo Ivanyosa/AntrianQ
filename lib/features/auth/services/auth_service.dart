@@ -4,7 +4,7 @@ class AuthService {
   final SupabaseClient _client = Supabase.instance.client;
 
   Future<void> register({
-    required String fullName,
+    required String username,
     required String email,
     required String password,
   }) async {
@@ -21,18 +21,13 @@ class AuthService {
 
     await _client.from('profiles').insert({
       'id': user.id,
-      'full_name': fullName,
+      'username': username,
+      'role': 'user',
     });
   }
 
-  Future<void> login({
-    required String email,
-    required String password,
-  }) async {
-    await _client.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
+  Future<void> login({required String email, required String password}) async {
+    await _client.auth.signInWithPassword(email: email, password: password);
   }
 
   Future<void> logout() async {
@@ -45,5 +40,21 @@ class AuthService {
 
   bool get isLoggedIn {
     return currentUser != null;
+  }
+
+  Future<String> getUserRole() async {
+    final user = _client.auth.currentUser;
+
+    print("AUTH USER ID: ${user?.id}");
+
+    final profile = await _client
+        .from('profiles')
+        .select()
+        .eq('id', user!.id)
+        .single();
+
+    print("PROFILE DATA: $profile");
+
+    return profile['role'];
   }
 }
