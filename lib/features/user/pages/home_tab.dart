@@ -10,13 +10,11 @@ class HomeTab extends ConsumerWidget {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
-
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-
           children: [
             const Text(
-              "Halo, Radja 👋",
+              "Halo 👋",
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
 
@@ -30,32 +28,50 @@ class HomeTab extends ConsumerWidget {
             const SizedBox(height: 30),
 
             const Text(
-              "Layanan Tersedia",
+              "Usaha Tersedia",
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
 
             const SizedBox(height: 16),
 
             Expanded(
-              child: FutureBuilder(
-                future: ref.read(queueProvider).getServices(),
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: ref.read(queueProvider).watchBusinesses(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  final services = snapshot.data!;
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        "Terjadi kesalahan:\n${snapshot.error}",
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+
+                  final businesses = snapshot.data ?? [];
+
+                  if (businesses.isEmpty) {
+                    return const Center(
+                      child: Text("Belum ada usaha tersedia"),
+                    );
+                  }
 
                   return ListView.builder(
-                    itemCount: services.length,
+                    itemCount: businesses.length,
                     itemBuilder: (context, index) {
-                      final service = services[index];
+                      final business = businesses[index];
 
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 12),
                         child: ServiceCard(
-                          serviceId: service['id'],
-                          title: service['name'],
+                          businessId: business['id'].toString(),
+                          title: business['name'] ?? '-',
+                          location: business['location'] ?? '-',
+                          status: business['status'] ?? 'closed',
                         ),
                       );
                     },
@@ -71,48 +87,102 @@ class HomeTab extends ConsumerWidget {
 }
 
 class ServiceCard extends ConsumerWidget {
-  final int serviceId;
+  final String businessId;
   final String title;
+  final String location;
+  final String status;
 
-  const ServiceCard({super.key, required this.serviceId, required this.title});
+  const ServiceCard({
+    super.key,
+    required this.businessId,
+    required this.title,
+    required this.location,
+    required this.status,
+  });
+
+  Color getStatusColor() {
+    switch (status.toLowerCase()) {
+      case 'open':
+        return Colors.green;
+
+      case 'break':
+        return Colors.orange;
+
+      default:
+        return Colors.red;
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       elevation: 3,
-
       child: Padding(
         padding: const EdgeInsets.all(16),
-
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-
           children: [
             Text(
               title,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
+
+            Text(location, style: const TextStyle(color: Colors.grey)),
+
+            const SizedBox(height: 6),
+
+            Row(
+              children: [
+                const Text(
+                  "Status: ",
+                  style: TextStyle(fontWeight: FontWeight.w500),
+                ),
+                Text(
+                  status.toUpperCase(),
+                  style: TextStyle(
+                    color: getStatusColor(),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 16),
 
             SizedBox(
               width: double.infinity,
-
               child: ElevatedButton(
-                onPressed: () async {
-                  try {
-                    await ref.read(queueProvider).takeQueue(serviceId);
+                onPressed: status.toLowerCase() != 'open'
+                    ? null
+                    : () async {
+                        try {
+                          final number = await ref
+                              .read(queueProvider)
+                              .takeQueue(businessId);
 
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Antrian berhasil diambil')),
-                    );
-                  } catch (e) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(e.toString())));
-                  }
-                },
-
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Berhasil mengambil nomor antrian $number',
+                                ),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  e.toString().replaceFirst('Exception: ', ''),
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      },
                 child: const Text("Ambil Antrian"),
               ),
             ),
