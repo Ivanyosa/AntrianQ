@@ -65,15 +65,31 @@ class _OwnerDashboardPageState extends ConsumerState<OwnerDashboardPage> {
                         ? null
                         : () async {
                             try {
-                              final next = await ref
+                              final result = await ref
                                   .read(queueProvider)
                                   .nextQueue(business['id'].toString());
+
+                              final number = result['queue_number'];
+                              final userId = result['user_id'];
+
+                              await Supabase.instance.client.functions.invoke(
+                                'send-queue-notification',
+                                body: {
+                                  'user_id': userId,
+                                  'title': 'Giliran Anda',
+                                  'body':
+                                      'Nomor antrian $number sedang dipanggil.',
+                                },
+                              );
+
+                              print("QUEUE NUMBER = $number");
+                              print("USER ID = $userId");
 
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      "Sekarang melayani nomor $next",
+                                      "Sekarang melayani nomor $number",
                                     ),
                                   ),
                                 );

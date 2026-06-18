@@ -125,13 +125,13 @@ class QueueService {
     return response.first;
   }
 
-  Future<int> nextQueue(String businessId) async {
+  Future<Map<String, dynamic>> nextQueue(String businessId) async {
     final result = await _client.rpc(
       'next_queue',
       params: {'p_business_id': businessId},
     );
 
-    return result as int;
+    return Map<String, dynamic>.from(result);
   }
 
   Future<void> updateBusinessStatus(String businessId, String status) async {
