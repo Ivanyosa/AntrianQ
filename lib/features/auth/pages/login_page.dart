@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_provider.dart';
 import 'register_page.dart';
+import '../../../core/services/fcm_service.dart';
 import '../../admin/pages/admin_page.dart';
 import '../../user/pages/user_page.dart';
 
@@ -45,6 +46,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
+
+      // Inisialisasi FCM dan simpan token
+      await FcmService().initialize();
+
       final role = await ref.read(authProvider).getUserRole();
 
       print("ROLE USER = [$role]");
