@@ -5,6 +5,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../auth/pages/login_page.dart';
 import '../../user/providers/queue_provider.dart';
 
+import '../widgets/header/admin_header.dart';
+import '../widgets/stats/admin_stat_card.dart';
+import '../widgets/search/admin_search.dart';
+import '../widgets/search/admin_filter.dart';
+import '../widgets/business/approval_card.dart';
+import '../widgets/update/update_request_card.dart';
+
 class AdminPage extends ConsumerStatefulWidget {
   const AdminPage({super.key});
 
@@ -17,10 +24,15 @@ class _AdminPageState extends ConsumerState<AdminPage> {
   void loadData() {
     adminFuture = Future.wait([
       ref.read(queueProvider).getAdminStats(),
-      ref.read(queueProvider).getPendingBusinesses(),
-      ref.read(queueProvider).getPendingUpdateRequests(),
+      ref.read(queueProvider).getBusinesses(),
+      ref.read(queueProvider).getUpdateRequests(),
     ]);
   }
+
+  final searchController = TextEditingController();
+
+  String selectedFilter = "Semua";
+  String keyword = "";
 
   @override
   void initState() {
@@ -67,6 +79,7 @@ class _AdminPageState extends ConsumerState<AdminPage> {
 
   @override
   void dispose() {
+    searchController.dispose();
     ref
         .read(queueProvider)
         .client
@@ -78,7 +91,7 @@ class _AdminPageState extends ConsumerState<AdminPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Admin Dashboard")),
+      appBar: AppBar(automaticallyImplyLeading: false),
       body: FutureBuilder(
         future: adminFuture,
 
@@ -90,228 +103,235 @@ class _AdminPageState extends ConsumerState<AdminPage> {
           final stats = snapshot.data![0] as Map<String, int>;
 
           final businesses = snapshot.data![1] as List<Map<String, dynamic>>;
+          debugPrint("Business count: ${businesses.length}");
+          debugPrint(businesses.toString());
 
           final updateRequests =
               snapshot.data![2] as List<Map<String, dynamic>>;
+          debugPrint("Update count: ${updateRequests.length}");
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                child: ListTile(
-                  title: const Text("Jumlah User"),
-                  trailing: Text(stats['users'].toString()),
+          final pendingCount =
+              businesses
+                  .where((e) => e['approval_status'] == "pending")
+                  .length +
+              updateRequests.where((e) => e['status'] == "pending").length;
+
+          var filteredBusinesses = businesses.where((business) {
+            final name = (business['name'] ?? '').toString().toLowerCase();
+
+            return name.contains(keyword.toLowerCase());
+          }).toList();
+
+          if (selectedFilter != "Semua") {
+            filteredBusinesses = filteredBusinesses.where((business) {
+              debugPrint("Keyword = $keyword");
+              debugPrint("Filtered = ${filteredBusinesses.length}");
+              return (business['approval_status'] ?? '')
+                      .toString()
+                      .toLowerCase() ==
+                  selectedFilter.toLowerCase();
+            }).toList();
+          }
+          var filteredUpdates = updateRequests.where((request) {
+            final payload = Map<String, dynamic>.from(request['payload']);
+
+            final name = (payload['name'] ?? '').toString().toLowerCase();
+
+            return name.contains(keyword.toLowerCase());
+          }).toList();
+
+          if (selectedFilter != "Semua") {
+            filteredUpdates = filteredUpdates.where((request) {
+              return (request['status'] ?? '').toString().toLowerCase() ==
+                  selectedFilter.toLowerCase();
+            }).toList();
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AdminHeader(
+                  username: "Admin",
+                  pendingCount: pendingCount,
+                  todayQueues: stats['todayQueues'] ?? 0,
                 ),
-              ),
 
-              Card(
-                child: ListTile(
-                  title: const Text("Jumlah Usaha"),
-                  trailing: Text(stats['businesses'].toString()),
-                ),
-              ),
+                const SizedBox(height: 25),
 
-              Card(
-                child: ListTile(
-                  title: const Text("Antrian Aktif"),
-                  trailing: Text(stats['activeQueues'].toString()),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              const Text(
-                "Pengajuan Edit Usaha",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-
-              const SizedBox(height: 12),
-
-              if (updateRequests.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text("Tidak ada pengajuan edit"),
-                  ),
-                ),
-
-              ...updateRequests.map((request) {
-                final payload = Map<String, dynamic>.from(request['payload']);
-
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          request['businesses']['name'],
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        Text("Lokasi: ${payload['location']}"),
-
-                        Text("Estimasi: ${payload['service_duration']}"),
-
-                        Text("Max Queue: ${payload['max_daily_queue']}"),
-
-                        const SizedBox(height: 12),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  await ref
-                                      .read(queueProvider)
-                                      .approveUpdateRequest(
-                                        request['id'].toString(),
-                                      );
-
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Edit disetujui"),
-                                    ),
-                                  );
-                                },
-                                child: const Text("APPROVE"),
-                              ),
-                            ),
-
-                            const SizedBox(width: 8),
-
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
-                                onPressed: () async {
-                                  await ref
-                                      .read(queueProvider)
-                                      .rejectUpdateRequest(
-                                        request['id'].toString(),
-                                      );
-
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text("Edit ditolak"),
-                                    ),
-                                  );
-                                },
-                                child: const Text("REJECT"),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: AdminStatCard(
+                        icon: Icons.people,
+                        title: "User",
+                        value: stats['users'].toString(),
+                      ),
                     ),
-                  ),
-                );
-              }),
-
-              if (businesses.isEmpty)
-                const Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text("Tidak ada pengajuan"),
-                  ),
+                  ],
                 ),
 
-              ...businesses.map(
-                (business) => Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          business['name'],
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
+                const SizedBox(height: 12),
 
-                        Text(business['location']),
-
-                        const SizedBox(height: 12),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  await ref
-                                      .read(queueProvider)
-                                      .approveBusiness(
-                                        business['id'].toString(),
-                                      );
-
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text("Usaha disetujui"),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: const Text("APPROVE"),
-                              ),
-                            ),
-
-                            const SizedBox(width: 12),
-
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                ),
-                                onPressed: () async {
-                                  await ref
-                                      .read(queueProvider)
-                                      .rejectBusiness(
-                                        business['id'].toString(),
-                                      );
-
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text("Usaha ditolak"),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: const Text("REJECT"),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: AdminStatCard(
+                        icon: Icons.store,
+                        title: "Usaha",
+                        value: stats['businesses'].toString(),
+                      ),
                     ),
-                  ),
+
+                    const SizedBox(width: 12),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  icon: const Icon(Icons.logout),
-                  label: const Text("Logout Admin"),
-                  onPressed: () async {
-                    await Supabase.instance.client.auth.signOut();
-
-                    if (context.mounted) {
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                        (route) => false,
-                      );
-                    }
+                AdminSearch(
+                  controller: searchController,
+                  onChanged: (value) {
+                    setState(() {
+                      keyword = value;
+                    });
                   },
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+
+                AdminFilter(
+                  selected: selectedFilter,
+                  onChanged: (value) {
+                    setState(() {
+                      selectedFilter = value;
+                    });
+                  },
+                ),
+                const Text(
+                  "Persetujuan Admin",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+
+                const SizedBox(height: 12),
+
+                if (filteredUpdates.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text("Tidak ada pengajuan edit"),
+                    ),
+                  ),
+
+                ...filteredUpdates.map((request) {
+                  final payload = Map<String, dynamic>.from(request['payload']);
+
+                  return UpdateRequestCard(
+                    status: request['status'],
+                    businessName: request['business_name'] ?? "-",
+                    ownerName: request['owner_name'] ?? "-",
+                    changedField: payload.keys.join(", "),
+                    submittedAt: request['created_at'] ?? "-",
+
+                    onDetail: () {
+                      // nanti kita buat dialog detail perubahan
+                    },
+
+                    onApprove: () async {
+                      await ref
+                          .read(queueProvider)
+                          .approveUpdateRequest(request['id'].toString());
+
+                      if (mounted) {
+                        setState(loadData);
+                      }
+                    },
+
+                    onReject: () async {
+                      await ref
+                          .read(queueProvider)
+                          .rejectUpdateRequest(request['id'].toString());
+
+                      if (mounted) {
+                        setState(loadData);
+                      }
+                    },
+                  );
+                }),
+
+                if (filteredBusinesses.isEmpty) const Card(),
+
+                ...filteredBusinesses
+                    .where((e) {
+                      if (selectedFilter == "Pending") {
+                        return e['approval_status'] == "pending";
+                      }
+
+                      if (selectedFilter == "Approved") {
+                        return e['approval_status'] == "approved";
+                      }
+
+                      if (selectedFilter == "Rejected") {
+                        return e['approval_status'] == "rejected";
+                      }
+
+                      return true;
+                    })
+                    .map((business) {
+                      return ApprovalCard(
+                        businessName: business['name'] ?? "-",
+                        ownerName: business['profiles']?['username'] ?? "-",
+                        location: business['location'] ?? "-",
+
+                        onDetail: () {
+                          // nanti kita buat dialog detail usaha
+                        },
+
+                        onApprove: () async {
+                          await ref
+                              .read(queueProvider)
+                              .approveBusiness(business['id'].toString());
+
+                          if (mounted) {
+                            setState(loadData);
+                          }
+                        },
+
+                        onReject: () async {
+                          await ref
+                              .read(queueProvider)
+                              .rejectBusiness(business['id'].toString());
+
+                          if (mounted) {
+                            setState(loadData);
+                          }
+                        },
+                      );
+                    }),
+                const SizedBox(height: 24),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                    ),
+                    icon: const Icon(Icons.logout),
+                    label: const Text("Logout Admin"),
+                    onPressed: () async {
+                      await Supabase.instance.client.auth.signOut();
+
+                      if (context.mounted) {
+                        Navigator.pushAndRemoveUntil(
+                          context,
+                          MaterialPageRoute(builder: (_) => const LoginPage()),
+                          (route) => false,
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
           );
         },
       ),

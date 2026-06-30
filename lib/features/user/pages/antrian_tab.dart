@@ -3,6 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/queue_provider.dart';
 
+import '../widgets/queue/queue_hero_card.dart';
+import '../widgets/queue/queue_bottom_info.dart';
+import '../widgets/queue/queue_cancel_button.dart';
+import '../widgets/queue/empty_queue.dart';
+import '../widgets/queue/queue_progress_card.dart';
+
 class AntrianTab extends ConsumerWidget {
   const AntrianTab({super.key});
 
@@ -18,12 +24,7 @@ class AntrianTab extends ConsumerWidget {
         final queue = snapshot.data;
 
         if (queue == null) {
-          return const Center(
-            child: Text(
-              "Kamu belum memiliki antrian aktif",
-              style: TextStyle(fontSize: 16),
-            ),
-          );
+          return const EmptyQueue();
         }
 
         final business = queue['businesses'];
@@ -46,97 +47,53 @@ class AntrianTab extends ConsumerWidget {
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 24),
 
-              Card(
-                elevation: 3,
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      Text(
-                        business['name'],
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+              QueueHeroCard(
+                businessName: business['name'],
+                myNumber: myNumber,
+                currentNumber: currentNumber,
+                remaining: remaining,
+                estimation: estimation,
+              ),
 
-                      const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-                      Text(
-                        myNumber.toString(),
-                        style: const TextStyle(
-                          fontSize: 56,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-
-                      const Text(
-                        "Nomor Antrian",
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
+              QueueBottomInfo(
+                estimation: estimation,
+                serviceName: "General Service",
               ),
 
               const SizedBox(height: 24),
 
-              ListTile(
-                leading: const Icon(Icons.confirmation_number),
-                title: const Text("Nomor Saat Ini"),
-                trailing: Text(currentNumber.toString()),
+              QueueProgressCard(
+                currentNumber: currentNumber,
+                myNumber: myNumber,
               ),
-
-              ListTile(
-                leading: const Icon(Icons.people),
-                title: const Text("Sisa Antrian"),
-                trailing: Text(remaining.toString()),
-              ),
-
-              ListTile(
-                leading: const Icon(Icons.schedule),
-                title: const Text("Estimasi"),
-                trailing: Text("$estimation menit"),
-              ),
-
-              ListTile(
-                leading: const Icon(Icons.info),
-                title: const Text("Status"),
-                trailing: Text(queue['status']),
-              ),
-
               const SizedBox(height: 30),
 
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  onPressed: () async {
-                    try {
-                      await ref
-                          .read(queueProvider)
-                          .cancelQueue(queue['id'].toString());
+              QueueCancelButton(
+                onPressed: () async {
+                  try {
+                    await ref
+                        .read(queueProvider)
+                        .cancelQueue(queue['id'].toString());
 
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Antrian berhasil dibatalkan"),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(
-                          context,
-                        ).showSnackBar(SnackBar(content: Text(e.toString())));
-                      }
-                    }
-                  },
-                  icon: const Icon(Icons.cancel),
-                  label: const Text("Batalkan Antrian"),
-                ),
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Antrian berhasil dibatalkan"),
+                      ),
+                    );
+                  } catch (e) {
+                    if (!context.mounted) return;
+
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(e.toString())));
+                  }
+                },
               ),
             ],
           ),

@@ -1,11 +1,13 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 class FcmService {
   final _messaging = FirebaseMessaging.instance;
   final _client = Supabase.instance.client;
 
   Future<void> initialize() async {
+    if (kIsWeb) return;
     // Minta izin notifikasi
     await _messaging.requestPermission();
 

@@ -1,16 +1,26 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class QueueService {
   final _client = Supabase.instance.client;
   SupabaseClient get client => _client;
 
-  /// Ambil daftar usaha
   Future<List<Map<String, dynamic>>> getBusinesses() async {
     final response = await _client
         .from('businesses')
-        .select()
-        .eq('approval_status', 'approved')
-        .order('created_at');
+        .select('''
+  *,
+  profiles!businesses_owner_id_fkey(
+    username,
+    avatar_index
+  )
+''')
+        .order('created_at', ascending: false);
+
+    debugPrint(response.toString());
 
     return List<Map<String, dynamic>>.from(response);
   }
@@ -81,28 +91,50 @@ class QueueService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  Future<void> registerBusiness({
+  registerBusiness({
     required String name,
     required String location,
     required String description,
     required int serviceDuration,
     required int maxDailyQueue,
+    XFile? image,
   }) async {
     final user = _client.auth.currentUser;
 
     if (user == null) {
-      throw Exception("User belum login");
+      throw Exception("Belum login");
     }
 
-    await _client.from('businesses').insert({
-      'owner_id': user.id,
-      'name': name,
-      'location': location,
-      'description': description,
-      'service_duration': serviceDuration,
-      'max_daily_queue': maxDailyQueue,
-      'status': 'closed',
-      'approval_status': 'pending',
+    String? logoUrl;
+
+    if (image != null) {
+      final fileName = "${DateTime.now().millisecondsSinceEpoch}.jpg";
+
+      await _client.storage
+          .from("business-logo")
+          .upload(fileName, File(image.path));
+
+      logoUrl = _client.storage.from("business-logo").getPublicUrl(fileName);
+    }
+
+    await _client.from("businesses").insert({
+      "owner_id": user.id,
+
+      "name": name,
+
+      "location": location,
+
+      "description": description,
+
+      "service_duration": serviceDuration,
+
+      "max_daily_queue": maxDailyQueue,
+
+      "logo_url": logoUrl,
+
+      "status": "closed",
+
+      "approval_status": "pending",
     });
   }
 
@@ -142,36 +174,76 @@ class QueueService {
   }
 
   Future<Map<String, int>> getAdminStats() async {
-    final users = await _client.from('profiles').select('id');
+    final users = await _client
+        .from('profiles')
+        .select('id')
+        .eq('role', 'user');
+
+    final owners = await _client
+        .from('profiles')
+        .select('id')
+        .eq('role', 'owner');
 
     final businesses = await _client.from('businesses').select('id');
 
-    final activeQueues = await _client
+    final today = DateTime.now().toIso8601String().split('T').first;
+
+    final todayQueues = await _client
         .from('queues')
         .select('id')
-        .eq('status', 'waiting');
+        .eq('queue_date', today);
+
+    final weekAgo = DateTime.now()
+        .subtract(const Duration(days: 6))
+        .toIso8601String()
+        .split('T')
+        .first;
+
+    final weekQueues = await _client
+        .from('queues')
+        .select('id')
+        .gte('queue_date', weekAgo);
+
+    final monthAgo = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      1,
+    ).toIso8601String().split('T').first;
+
+    final monthQueues = await _client
+        .from('queues')
+        .select('id')
+        .gte('queue_date', monthAgo);
+
+    debugPrint("Users : ${users.length}");
+    debugPrint("Owners : ${owners.length}");
+    debugPrint("Business : ${businesses.length}");
 
     return {
       'users': users.length,
+      'owners': owners.length,
       'businesses': businesses.length,
-      'activeQueues': activeQueues.length,
+      'todayQueues': todayQueues.length,
+      'weekQueues': weekQueues.length,
+      'monthQueues': monthQueues.length,
     };
   }
 
-  Future<List<Map<String, dynamic>>> getPendingBusinesses() async {
-    final response = await _client
-        .from('businesses')
-        .select()
-        .eq('approval_status', 'pending')
-        .order('created_at');
-
-    return List<Map<String, dynamic>>.from(response);
-  }
-
   Future<void> approveBusiness(String businessId) async {
+    final business = await _client
+        .from('businesses')
+        .select('owner_id')
+        .eq('id', businessId)
+        .single();
+
+    await _client
+        .from('profiles')
+        .update({'role': 'owner'})
+        .eq('id', business['owner_id']);
+
     await _client
         .from('businesses')
-        .update({'approval_status': 'approved', 'status': 'closed'})
+        .update({'approval_status': 'approved', 'status': 'open'})
         .eq('id', businessId);
   }
 
@@ -223,14 +295,11 @@ class QueueService {
     });
   }
 
-  Future<List<Map<String, dynamic>>> getPendingUpdateRequests() async {
+  Future<List<Map<String, dynamic>>> getUpdateRequests() async {
     final response = await _client
         .from('business_update_requests')
-        .select('''
-        *,
-        businesses(name)
-      ''')
-        .eq('status', 'pending');
+        .select()
+        .order('created_at', ascending: false);
 
     return List<Map<String, dynamic>>.from(response);
   }
@@ -326,15 +395,121 @@ class QueueService {
         });
   }
 
-  Stream<List<Map<String, dynamic>>> watchBusinesses() {
+  Stream<List<Map<String, dynamic>>> watchBusinesses(String status) {
+    return _client.from('businesses').stream(primaryKey: ['id']).map((data) {
+      var result = data.where((b) => b['approval_status'] == 'approved');
+
+      if (status != 'all') {
+        result = result.where((b) => b['status'] == status);
+      }
+
+      return result.map((e) => Map<String, dynamic>.from(e)).toList();
+    });
+  }
+
+  Future<void> updateAvatar(int index) async {
+    final user = _client.auth.currentUser;
+
+    if (user == null) return;
+
+    await _client
+        .from('profiles')
+        .update({'avatar_index': index})
+        .eq('id', user.id);
+
+    debugPrint("Avatar berhasil diubah menjadi $index");
+  }
+
+  Stream<Map<String, dynamic>?> watchProfile() {
+    final user = _client.auth.currentUser;
+
+    if (user == null) {
+      return Stream.value(null);
+    }
+
     return _client
-        .from('businesses')
+        .from('profiles')
         .stream(primaryKey: ['id'])
-        .map(
-          (data) => data
-              .where((b) => b['approval_status'] == 'approved')
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList(),
-        );
+        .eq('id', user.id)
+        .map((data) {
+          if (data.isEmpty) return null;
+
+          return data.first;
+        });
+  }
+
+  Future<List<double>> getWeeklyChart(String businessId) async {
+    debugPrint("GET WEEKLY CHART");
+    debugPrint("Business ID = $businessId");
+
+    final now = DateTime.now();
+
+    final data = await client
+        .from('queues')
+        .select('queue_date')
+        .eq('business_id', businessId)
+        .eq('status', 'completed');
+
+    debugPrint(data.toString());
+
+    List<double> values = List.filled(7, 0);
+
+    for (final item in data) {
+      final date = DateTime.parse(item['queue_date']);
+
+      final today = DateTime(now.year, now.month, now.day);
+      final itemDay = DateTime(date.year, date.month, date.day);
+
+      final diff = today.difference(itemDay).inDays;
+
+      if (diff >= 0 && diff < 7) {
+        values[date.weekday - 1]++;
+      }
+    }
+
+    debugPrint(values.toString());
+
+    return values;
+  }
+
+  Future<List<Map<String, dynamic>>> getWaitingQueues(
+    String businessId,
+    int sessionNumber,
+  ) async {
+    final data = await client
+        .from('queues')
+        .select('queue_number,status')
+        .eq('business_id', businessId)
+        .eq('queue_date', DateTime.now().toIso8601String().split('T').first)
+        .eq('session_number', sessionNumber)
+        .eq('status', 'waiting')
+        .order('queue_number');
+
+    return List<Map<String, dynamic>>.from(data);
+  }
+
+  Future<List<double>> getAdminWeeklyChart() async {
+    final now = DateTime.now();
+
+    final weekAgo = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(const Duration(days: 6));
+
+    final data = await _client
+        .from('queues')
+        .select('queue_date')
+        .gte('queue_date', weekAgo.toIso8601String().split('T').first);
+
+    List<double> values = List.filled(7, 0);
+
+    for (final item in data) {
+      final date = DateTime.parse(item['queue_date']);
+
+      values[date.weekday - 1]++;
+    }
+
+    return values;
   }
 }

@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/queue_provider.dart';
 
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+
 class OwnerRegistrationPage extends ConsumerStatefulWidget {
   const OwnerRegistrationPage({super.key});
 
@@ -20,6 +23,8 @@ class _OwnerRegistrationPageState extends ConsumerState<OwnerRegistrationPage> {
   final _durationController = TextEditingController();
   final _maxQueueController = TextEditingController();
 
+  XFile? selectedImage;
+
   bool isLoading = false;
 
   @override
@@ -30,6 +35,18 @@ class _OwnerRegistrationPageState extends ConsumerState<OwnerRegistrationPage> {
     _durationController.dispose();
     _maxQueueController.dispose();
     super.dispose();
+  }
+
+  Future<void> pickImage() async {
+    final picker = ImagePicker();
+
+    final image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      setState(() {
+        selectedImage = image;
+      });
+    }
   }
 
   Future<void> submit() async {
@@ -48,6 +65,7 @@ class _OwnerRegistrationPageState extends ConsumerState<OwnerRegistrationPage> {
             description: _descriptionController.text.trim(),
             serviceDuration: int.parse(_durationController.text),
             maxDailyQueue: int.parse(_maxQueueController.text),
+            image: selectedImage,
           );
 
       if (mounted) {
@@ -78,8 +96,38 @@ class _OwnerRegistrationPageState extends ConsumerState<OwnerRegistrationPage> {
           key: _formKey,
           child: Column(
             children: [
+              GestureDetector(
+                onTap: pickImage,
+                child: Container(
+                  height: 150,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: selectedImage == null
+                      ? const Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo, size: 42),
+                              SizedBox(height: 8),
+                              Text("Upload Logo Usaha"),
+                            ],
+                          ),
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(18),
+                          child: Image.file(
+                            File(selectedImage!.path),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                ),
+              ),
               TextFormField(
                 controller: _nameController,
+
                 decoration: const InputDecoration(labelText: "Nama Usaha"),
                 validator: (value) => value!.isEmpty ? "Wajib diisi" : null,
               ),

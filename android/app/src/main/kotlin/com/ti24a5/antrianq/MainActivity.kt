@@ -1,4 +1,4 @@
-package com.kholiq.antrianq
+package com.ti24a5.antriaq
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,11 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/auth_provider.dart';
-import 'register_page.dart';
+import '../../../core/constants/app_spacing.dart';
 import '../../../core/services/fcm_service.dart';
+
 import '../../admin/pages/admin_page.dart';
 import '../../user/pages/user_page.dart';
+
+import '../providers/auth_provider.dart';
+import '../widgets/login_form.dart';
+import '../widgets/login_header.dart';
+import '../widgets/register_link.dart';
+import 'register_page.dart';
+
+import 'package:flutter/foundation.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -40,6 +48,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     });
 
     try {
+      debugPrint("STEP 1 : Login");
+
       await ref
           .read(authProvider)
           .login(
@@ -47,136 +57,82 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             password: _passwordController.text.trim(),
           );
 
-      // Inisialisasi FCM dan simpan token
-      await FcmService().initialize();
+      debugPrint("STEP 2 : Login Success");
+
+      if (!kIsWeb) {
+        debugPrint("STEP 3 : Initialize FCM");
+        await FcmService().initialize();
+      }
+
+      debugPrint("STEP 4 : Get User Role");
 
       final role = await ref.read(authProvider).getUserRole();
 
-      print("ROLE USER = [$role]");
+      debugPrint("ROLE = $role");
 
-      if (mounted) {
-        ScaffoldMessenger.of(
+      if (!mounted) return;
+
+      debugPrint("STEP 5 : Navigate");
+
+      if (role.trim().toLowerCase() == "admin") {
+        Navigator.pushReplacement(
           context,
-        ).showSnackBar(const SnackBar(content: Text("Login berhasil")));
-
-        if (role.trim().toLowerCase() == 'admin') {
-          print("MASUK ADMIN PAGE");
-
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const AdminPage()),
-          );
-        } else {
-          print("MASUK USER PAGE");
-
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const UserPage()),
-          );
-        }
+          MaterialPageRoute(builder: (_) => const AdminPage()),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const UserPage()),
+        );
       }
-    } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+    } catch (e, s) {
+      debugPrint("ERROR = $e");
+      debugPrint("$s");
     }
 
-    setState(() {
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Login")),
-
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-
-        child: Form(
-          key: _formKey,
-
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             children: [
-              TextFormField(
-                controller: _emailController,
+              const LoginHeader(),
 
-                decoration: const InputDecoration(
-                  labelText: "Email",
-                  border: OutlineInputBorder(),
-                ),
-
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return "Email wajib diisi";
-                  }
-
-                  return null;
+              LoginForm(
+                formKey: _formKey,
+                emailController: _emailController,
+                passwordController: _passwordController,
+                obscurePassword: _obscurePassword,
+                isLoading: _isLoading,
+                onLogin: login,
+                onTogglePassword: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
                 },
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.massive),
 
-              TextFormField(
-                controller: _passwordController,
-
-                obscureText: _obscurePassword,
-
-                decoration: InputDecoration(
-                  labelText: "Password",
-                  border: const OutlineInputBorder(),
-
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
-
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
-                ),
-
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return "Password wajib diisi";
-                  }
-
-                  return null;
-                },
-              ),
-
-              const SizedBox(height: 24),
-
-              SizedBox(
-                width: double.infinity,
-
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : login,
-
-                  child: _isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text("Login"),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              TextButton(
-                onPressed: () {
+              RegisterLink(
+                onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const RegisterPage()),
                   );
                 },
-
-                child: const Text("Belum punya akun? Register"),
               ),
+
+              const SizedBox(height: 24),
             ],
           ),
         ),
