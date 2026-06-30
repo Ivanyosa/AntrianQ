@@ -52,12 +52,11 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDMBzAnbhnhvboNALc-ipRSb6O9g5IY0Cg',
-    appId: '1:1010550848274:android:9586d3f856d15a7e4c51cb',
+    appId: '1:1010550848274:android:8bf727fb5dd572774c51cb',
     messagingSenderId: '1010550848274',
     projectId: 'antrianq',
     storageBucket: 'antrianq.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyBBygLg85i2G-g9WCpLPtMvLosltecgVU4',
     appId: '1:1010550848274:ios:22903768b1ae5a884c51cb',
@@ -66,7 +65,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'antrianq.firebasestorage.app',
     iosBundleId: 'com.kholiq.antrianq',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyBBygLg85i2G-g9WCpLPtMvLosltecgVU4',
     appId: '1:1010550848274:ios:22903768b1ae5a884c51cb',

@@ -3,13 +3,33 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/queue_provider.dart';
 
-class RiwayatTab extends ConsumerWidget {
+import '../widgets/history/history_header.dart';
+import '../widgets/history/history_stats.dart';
+import '../widgets/history/history_filter.dart';
+import '../widgets/history/history_list.dart';
+import '../widgets/history/empty_history.dart';
+
+class RiwayatTab extends ConsumerStatefulWidget {
   const RiwayatTab({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RiwayatTab> createState() => _RiwayatTabState();
+}
+
+class _RiwayatTabState extends ConsumerState<RiwayatTab> {
+  String selectedFilter = "all";
+  late Future<List<Map<String, dynamic>>> historyFuture;
+  @override
+  void initState() {
+    super.initState();
+
+    historyFuture = ref.read(queueProvider).getQueueHistory();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: ref.read(queueProvider).getQueueHistory(),
+      future: historyFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -20,66 +40,53 @@ class RiwayatTab extends ConsumerWidget {
         }
 
         final histories = snapshot.data ?? [];
+        List<Map<String, dynamic>> filtered = histories;
 
-        if (histories.isEmpty) {
-          return const Center(child: Text("Belum ada riwayat antrian"));
+        if (selectedFilter != "all") {
+          filtered = histories
+              .where((e) => e['status'] == selectedFilter)
+              .toList();
         }
 
-        return ListView.builder(
+        final completed = histories
+            .where((e) => e['status'] == 'completed')
+            .length;
+
+        if (histories.isEmpty) {
+          return const EmptyHistory();
+        }
+
+        return Padding(
           padding: const EdgeInsets.all(16),
-          itemCount: histories.length,
-          itemBuilder: (context, index) {
-            final history = histories[index];
 
-            final business = history['businesses'];
+          child: Column(
+            children: [
+              const HistoryHeader(),
 
-            final status = history['status'].toString();
+              const SizedBox(height: 20),
 
-            Color statusColor;
+              HistoryStats(total: histories.length, completed: completed),
 
-            switch (status) {
-              case 'completed':
-                statusColor = Colors.green;
-                break;
+              const SizedBox(height: 20),
 
-              case 'cancelled':
-                statusColor = Colors.orange;
-                break;
-
-              default:
-                statusColor = Colors.red;
-            }
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                leading: CircleAvatar(
-                  child: Text(history['queue_number'].toString()),
-                ),
-
-                title: Text(business['name'] ?? '-'),
-
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Tanggal: ${DateTime.parse(history['created_at']).toLocal()}",
-                    ),
-
-                    const SizedBox(height: 4),
-
-                    Text(
-                      "Status: ${status.toUpperCase()}",
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+              HistoryFilter(
+                selected: selectedFilter,
+                onChanged: (value) {
+                  setState(() {
+                    selectedFilter = value;
+                  });
+                },
               ),
-            );
-          },
+
+              const SizedBox(height: 20),
+
+              Expanded(
+                child: filtered.isEmpty
+                    ? const EmptyHistory()
+                    : HistoryList(histories: filtered),
+              ),
+            ],
+          ),
         );
       },
     );
